@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Element Duel</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding:20px; }
+        .phase-container {
+            border: 2px solid #333;
+            padding: 20px;
+            margin: 10px 0;
+            border-radius: 8px;
+        }
+        #setup-phase { background-color: #f0f9ff; }
+        #action-phase { background-color: #fff3cd; }
+        #resolution-phase { background-color: #d4edda; }
+        .player-status {
+            padding: 10px;
+            margin: 5px 0;
+            background-color: white;
+            border-radius: 4px;
+        }
+        button {
+            padding: 8px 15px;
+            margin: 3px;
+            border: 1px solid #666;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:disabled {
+            background-color: #e9ecef;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+        .selected {
+            background: #007bff;
+            color: white;
+        }
+        .tooltip {
+            position: relative;
+            display: inline-block;
+            margin-left: 5px;
+        }
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 200px;
+            background-color: white;
+            border: 1px solid #ccc;
+            padding: 8px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            transform: translateX(-50%);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        .tooltip:hover .tooltiptext { visibility: visible; }
+        #action-results {
+            line-height: 1.6;
+            font-size: 14px;
+        }
+        .status-change {
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .damage { color: #dc3545; }
+        .heal { color: #28a745; }
+        .hp-indicator::before { content: "HP: "; }
+        .mana-indicator::before { content: "Mana: "; }
+    </style>
+</head>
+<body>
+    <div id="setup-phase" class="phase-container">
+        <h2>Round <span id="round-num">1</span></h2>
+        <div id="all-players"></div>
+        <button onclick="startTurn()" style="margin-top:15px;">Start Round</button>
+    </div>
+
+    <div id="action-phase" class="phase-container" style="display:none;">
+        <h2>Player <span id="current-player">1</span>'s Turn</h2>
+        <div class="player-status">
+            <span class="hp-indicator"><span id="current-health">3</span></span> |
+            <span class="mana-indicator"><span id="current-mana">0</span></span>
+        </div>
+        <div id="action-buttons" style="margin:15px 0;"></div>
+        <div>
+            <button onclick="nextPhase()" style="background:#6c757d;color:white;">Next</button>
+            <button onclick="earlyEndPhase()" style="background:#dc3545;color:white;">End Early</button>
+        </div>
+    </div>
+
+    <div id="resolution-phase" class="phase-container" style="display:none;">
+        <h3>Round Resolution</h3>
+        <div id="action-results"></div>
+        <button onclick="continueGame()" style="margin-top:15px;">Continue</button>
+    </div>
+
+    <div id="result-screen" class="phase-container" style="display:none;">
+        <h2>Game Over</h2>
+        <div id="ranking"></div>
+        <button onclick="resetGame()" style="margin-top:15px;">Restart Game</button>
+    </div>
+
+<script>
+const actionElements = {
+    'Torrent': 'water',
+    'IceShard': 'water',
+    'PoisonMist': 'water',
+    'Ignite': 'fire',
+    'HolyFlame': 'fire',
+    'Ember': 'fire',
+    'Thorn': 'wood',
+    'FlowerSpear': 'wood',
+    'Strangle': 'wood'
+};
+
+let players = Array(4).fill().map((_,i) => ({
+    id: i+1,
+    health: 3,
+    mana: 0,
+    action: null,
+    isAlive: true
+}));
+
+let currentPlayer = 0;
+let round = 1;
+let earlyEnd = false;
+
+function isElementCounter(defenderElement, attackerElement) {
+    return (defenderElement === 'water' && attackerElement === 'fire') ||
+           (defenderElement === 'fire' && attackerElement === 'wood') ||
+           (defenderElement === 'wood' && attackerElement === 'water');
+}
+
+const actionCosts = {
+    'Charge':0, 'Defend':0, 'TrueDefend':0,
+    'Heal':4, 'Ultimate':5,
+    'Torrent':1, 'IceShard':2, 'PoisonMist':3,
+    'Ignite':1, 'HolyFlame':2, 'Ember':3,
+    'Thorn':1, 'FlowerSpear':2, 'Strangle':3
+};
+
+const actionEffects = {
+    'Heal': { type: 'heal', value: 1 },
+    'Ultimate': { type: 'aoe', value: 1 },
+    'Torrent': { type: 'attack', value: 1, element: 'water', cost:1 },
+    'IceShard': { type: 'attack', value: 1, element: 'water', cost:2 },
+    'PoisonMist': { type: 'attack', value: 1, element: 'water', cost:3 },
+    'Ignite': { type: 'attack', value: 1, element: 'fire', cost:1 },
+    'HolyFlame': { type: 'attack', value: 1, element: 'fire', cost:2 },
+    'Ember': { type: 'attack', value: 1, element: 'fire', cost:3 },
+    'Thorn': { type: 'attack', value: 1, element: 'wood', cost:1 },
+    'FlowerSpear': { type: 'attack', value: 1, element: 'wood', cost:2 },
+    'Strangle': { type: 'attack', value: 1, element: 'wood', cost:3 }
+};
+
+function initGame() {
+    showPhase('setup-phase');
+    updateAllPlayersDisplay();
+}
+
+function showPhase(phaseId) {
+    ['setup-phase', 'action-phase', 'resolution-phase', 'result-screen'].forEach(id => {
+        document.getElementById(id).style.display = id === phaseId ? 'block' : 'none';
+    });
+}
+
+function updateAllPlayersDisplay() {
+    const container = document.getElementById('all-players');
+    container.innerHTML = players.filter(p => p.isAlive).map(p => `
+        <div class="player-status">
+            Player ${p.id}:
+            <span class="hp-indicator">${p.health}</span> |
+            <span class="mana-indicator">${p.mana}</span>
+        </div>
+    `).join('');
+}
+
+function startTurn() {
+    currentPlayer = 0;
+    earlyEnd = false;
+    showPhase('action-phase');
+    loadPlayerActions();
+}
+
+function nextPhase() {
+    nextPlayer();
+}
+
+function loadPlayerActions() {
+    while(currentPlayer < 4 && !players[currentPlayer].isAlive) {
+        currentPlayer++;
+    }
+
+    if(currentPlayer >= 4) {
+        resolveActions();
+        return;
+    }
+
+    const player = players[currentPlayer];
+    document.getElementById('current-player').textContent = player.id;
+    document.getElementById('current-health').textContent = player.health;
+    document.getElementById('current-mana').textContent = player.mana;
+    renderActionButtons(player);
+}
+
+function renderActionButtons(player) {
+    const actionGroups = [
+        ['Charge'],
+        ['Defend', 'TrueDefend'],
+        ['Water', 'Torrent', 'IceShard', 'PoisonMist'],
+        ['Fire', 'Ignite', 'HolyFlame', 'Ember'],
+        ['Wood', 'Thorn', 'FlowerSpear', 'Strangle'],
+        ['Heal'],
+        ['Ultimate']
+    ];
+
+    const buttonsHTML = actionGroups.map(group => `
+        <div class="button-row">
+            ${group.map(action => {
+                const isElementHeader = ['Water','Fire','Wood'].includes(action);
+                const cost = actionCosts[action] || 0;
+                const disabled = isElementHeader ? true : (cost > player.mana);
+                const isSelected = player.action === action;
+                return `
+                <button ${disabled ? 'disabled' : ''}
+                    ${isSelected ? 'class="selected"' : ''}
+                    ${!isElementHeader ? `onclick="selectAction('${action}')"` : ''}>
+                    ${action}
+                    ${!isElementHeader ? `
+                    <span class="tooltip">?
+                        <span class="tooltiptext">${getTooltip(action)}</span>
+                    </span>` : ''}
+                </button>`
+            }).join('')}
+        </div>
+    `).join('');
+
+    document.getElementById('action-buttons').innerHTML = `
+        <div style="margin-bottom:15px;">Available Mana: ${player.mana}</div>
+        ${buttonsHTML}
+    `;
+}
+
+function selectAction(action) {
+    const player = players[currentPlayer];
+    player.action = action;
+    renderActionButtons(player);
+}
+
+function earlyEndPhase() {
+    earlyEnd = true;
+    nextPlayer();
+}
+
+function nextPlayer() {
+    currentPlayer++;
+    if(!earlyEnd && currentPlayer < 4) {
+        loadPlayerActions();
+    } else {
+        resolveActions();
+    }
+}
+
+function resolveActions() {
+    const oldStates = players.map(p => ({ ...p }));
+
+    players.forEach((attacker, index) => {
+        if(!attacker.isAlive || !attacker.action) return;
+
+        const action = attacker.action;
+        const cost = actionCosts[action];
+        attacker.mana = Math.max(attacker.mana - cost, 0);
+
+        if(action === 'Charge') {
+            attacker.mana = Math.min(attacker.mana + 1, 5);
+        }
+
+        const effect = actionEffects[action];
+        if(effect) {
+            switch(effect.type) {
+                case 'heal':
+                    attacker.health = Math.min(attacker.health + effect.value, 3);
+                    break;
+
+                case 'aoe':
+                case 'attack':
+                    players.forEach(defender => {
+                        if(defender.isAlive && defender.id !== attacker.id) {
+                            let isDefended = false;
+                            const attackerCost = actionCosts[action];
+                            const attackerElement = effect.element;
+
+                            if(action === 'Ultimate') {
+                                isDefended = false;
+                            } else {
+                                if(defender.action === 'Defend' && attackerCost <= 2) {
+                                    isDefended = true;
+                                } else if(defender.action === 'TrueDefend' && attackerCost === 3) {
+                                    isDefended = true;
+                                }
+
+                                if(!isDefended && actionElements[defender.action]) {
+                                    const defenderEffect = actionEffects[defender.action];
+                                    if(defenderEffect && defenderEffect.type === 'attack') {
+                                        const defenderElement = defenderEffect.element;
+                                        const defenderCost = actionCosts[defender.action];
+                                        const elementCounter = isElementCounter(defenderElement, attackerElement);
+                                        const sameElement = defenderElement === attackerElement;
+
+                                        if(defenderCost === 1) {
+                                            isDefended = (elementCounter && attackerCost <= 2) || (sameElement && defenderCost >= attackerCost);
+                                        } else if(defenderCost === 2) {
+                                            isDefended = (elementCounter && attackerCost >= 2) ||
+                                                         attackerCost === 1 ||
+                                                         (sameElement && defenderCost >= attackerCost);
+                                        } else if(defenderCost === 3) {
+                                            isDefended = elementCounter || attackerCost <= 2 || (sameElement && defenderCost >= attackerCost);
+                                        }
+                                    }
+                                }
+                            }
+
+                            // 若防守者使用 Ultimate，本回合免疫所有血量伤害
+                            if(!isDefended && defender.action !== 'Ultimate') {
+                                defender.health -= effect.value;
+                            }
+                        }
+                    });
+                    break;
+            }
+        }
+    });
+
+    players.forEach(p => {
+        p.health = Math.max(p.health, 0);
+        if(p.health <= 0) p.isAlive = false;
+    });
+
+    showResolution(oldStates);
+    checkGameOver();
+}
+
+function showResolution(oldStates) {
+    let resultHTML = '<h3>Status Changes:</h3>';
+
+    players.forEach((p, i) => {
+        if(!p.isAlive) return;
+
+        const old = oldStates[i];
+        const changes = [];
+
+        if(p.health !== old.health) {
+            const diff = p.health - old.health;
+            const direction = diff > 0 ? 'increase' : 'decrease';
+            const value = Math.abs(diff);
+            changes.push(`
+                <span class="status-change ${direction === 'increase' ? 'heal' : 'damage'}">
+                    HP ${direction} ${value}
+                </span>
+            `);
+        }
+
+        if(p.mana !== old.mana) {
+            const diff = p.mana - old.mana;
+            const direction = diff > 0 ? 'increase' : 'decrease';
+            const value = Math.abs(diff);
+            changes.push(`
+                <span class="status-change ${direction === 'increase' ? 'heal' : 'damage'}">
+                    Mana ${direction} ${value}
+                </span>
+            `);
+        }
+
+        const actionText = p.action ? `
+            <span class="action-name">${p.action}</span>
+            ${actionEffects[p.action]?.type === 'attack' ?
+                `<span class="damage">(1 damage to all)</span>` : ''}
+        ` : 'No action selected';
+
+        resultHTML += `
+            <div class="player-result">
+                <strong>Player ${p.id}</strong>: ${actionText}
+                ${changes.length ? `<div>${changes.join(' | ')}</div>` : ''}
+            </div>
+        `;
+    });
+
+    document.getElementById('action-results').innerHTML = resultHTML;
+    showPhase('resolution-phase');
+}
+
+function continueGame() {
+    round++;
+    players.forEach(p => p.action = null);
+    document.getElementById('round-num').textContent = round;
+    updateAllPlayersDisplay();
+    showPhase('setup-phase');
+}
+
+function checkGameOver() {
+    const alivePlayers = players.filter(p => p.isAlive);
+    if(alivePlayers.length === 1) {
+        document.getElementById('ranking').innerHTML = `
+            <h3>Winner: Player ${alivePlayers[0].id}</h3>
+            <p>Survived rounds: ${round}</p>
+        `;
+        showPhase('result-screen');
+    }
+}
+
+function resetGame() {
+    players = Array(4).fill().map((_,i) => ({
+        id: i+1,
+        health: 3,
+        mana: 0,
+        action: null,
+        isAlive: true
+    }));
+    currentPlayer = 0;
+    round = 1;
+    earlyEnd = false;
+    document.getElementById('round-num').textContent = round;
+    updateAllPlayersDisplay();
+    showPhase('setup-phase');
+}
+
+function getTooltip(action) {
+    const tips = {
+        'Charge': 'Gain 1 mana',
+        'Defend': 'Block 1-2 cost attacks (except Ultimate)',
+        'TrueDefend': 'Block 3 cost attacks (except Ultimate)',
+        'Heal': 'Heal 1 HP (4 mana)',
+        'Ultimate': 'Deal 1 damage to all (5 mana, unblockable) and grant immunity to HP damage this round',
+        'Torrent': 'Water attack (1 mana) - Blocks: Fire 1-2, Water any',
+        'IceShard': 'Water attack (2 mana) - Blocks: Fire 2-3, any 1, Water any',
+        'PoisonMist': 'Water attack (3 mana) - Blocks: Fire 3, any 1-2, Water any',
+        'Ignite': 'Fire attack (1 mana) - Blocks: Wood 1-2, Fire any',
+        'HolyFlame': 'Fire attack (2 mana) - Blocks: Wood 2-3, any 1, Fire any',
+        'Ember': 'Fire attack (3 mana) - Blocks: Wood 3, any 1-2, Fire any',
+        'Thorn': 'Wood attack (1 mana) - Blocks: Water 1-2, Wood any',
+        'FlowerSpear': 'Wood attack (2 mana) - Blocks: Water 2-3, any 1, Wood any',
+        'Strangle': 'Wood attack (3 mana) - Blocks: Water 3, any 1-2, Wood any'
+    };
+    return tips[action] || '';
+}
+
+// 确保页面加载时初始化游戏
+window.onload = initGame;
+</script>
+</body>
+</html>
