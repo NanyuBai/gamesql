@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Dragon Cards Game</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .page { display: none; }
+    .active { display: block; }
+    .card { border: 1px solid #333; padding: 10px; margin: 5px; width: 150px; background: #fff; cursor: move; }
+    .slot { border: 2px dashed #aaa; padding: 20px; margin: 10px; width: 160px; height: 100px; text-align: center; vertical-align: middle; display: inline-block; }
+    .slot.filled { border-style: solid; }
+    .button-disabled { background: #ccc; pointer-events: none; }
+    .dragon-container { margin-bottom: 20px; }
+    .dragon-title { font-weight: bold; }
+    /* 新增选择效果样式 */
+    .defense-selected { border: 2px solid blue !important; }
+    .attack-selected { border: 2px solid red !important; }
+    .prev-defense { border: 2px dashed blue !important; }
+    .prev-attack { border: 2px dashed red !important; }
+    /* Modal styles */
+    #replacementModal {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center;
+    }
+    .modal-content { background: #fff; padding: 20px; border-radius: 5px; text-align: center; }
+    /* Arrange hand cards horizontally */
+    #playerAHand, #playerBHand {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: wrap;
+    }
+    /* Rules page styling */
+    #rulesPage {
+      padding: 20px;
+      line-height: 1.6;
+    }
+    #rulesPage h1 { text-align: center; }
+    #rulesPage h2 { margin-top: 20px; }
+    #rulesPage ul { list-style: disc; padding-left: 40px; }
+    #rulesPage p { margin: 10px 0; }
+    #rulesPage button { margin-top: 20px; padding: 10px 20px; font-size: 16px; }
+  </style>
+</head>
+<body>
+  <!-- Rules Page -->
+  <div id="rulesPage" class="page active">
+    <h1>Dragon Card – Game Summary</h1>
+    <h2>Components:</h2>
+    <ul>
+      <li>10 unique cards, each featuring two numbers (ability and health) and a special skill.</li>
+    </ul>
+    <h2>Dragon Assembly:</h2>
+    <p>Each player builds a dragon by placing three cards into designated slots:</p>
+    <ul>
+      <li><strong>Head</strong>: Determines attack power.</li>
+      <li><strong>Body</strong>: Determines defense value.</li>
+      <li><strong>Tail</strong>: Determines speed and comes with a one-time-use special skill that becomes inactive after use.</li>
+    </ul>
+    <p>The card’s health is equal to its ability value. When a part’s health drops to 0 or below, it is destroyed and discarded until replaced.</p>
+    <h2>Setup Phase:</h2>
+    <ul>
+      <li><strong>Player A</strong>: Draws 5 cards and selects 3 to form a red dragon (assigning them to head, body, and tail slots).</li>
+      <li><strong>Player B</strong>: Uses the remaining 5 cards to form a blue dragon similarly.</li>
+    </ul>
+    <p>The leftover cards are shuffled back into the deck.</p>
+    <h2>Gameplay (Per Round):</h2>
+    <p><strong>Draw Opportunities</strong>: Each player starts with 2 draw chances per round. A draw lets a player replace one of their dragon’s parts by drawing a new card.</p>
+    <h3>1. Action Phase:</h3>
+    <ul>
+      <li>Players may choose to activate their tail card’s special skill.</li>
+      <li>Each player selects one of their own parts to defend and one opponent’s part to attack.</li>
+    </ul>
+    <h3>Battle Resolution:</h3>
+    <ul>
+      <li><strong>Turn Order</strong>: Determined by comparing the tail cards’ speed values; the higher speed acts first.</li>
+    </ul>
+    <h3>2. Attack Mechanics:</h3>
+    <ul>
+      <li>The attacker’s head card value is used as attack power.</li>
+      <li>If the target is defended, damage equals (attack power minus the target’s defense value), with a minimum of 0.</li>
+      <li>If not defended, the full attack power is applied as damage.</li>
+      <li>Damage reduces the target part’s health; if health falls to 0 or below, that part is destroyed.</li>
+    </ul>
+    <h3>3. Win Condition:</h3>
+    <ul>
+      <li>If a part is destroyed and its owner has exhausted their 2 draw chances, that player loses the game.</li>
+    </ul>
+    <h2>Rounds:</h2>
+    <p>The game continues with subsequent rounds following the same structure until one player wins the game.</p>
+    <button onclick="showPage('setupPageA')">Start Game</button>
+  </div>
+
+  <!-- Setup Phase: Player A -->
+  <div id="setupPageA" class="page">
+    <h2>Player A Setup (Red Dragon)</h2>
+    <div id="playerAHand" style="margin-bottom: 20px;">
+      <!-- Player A's hand cards will appear here -->
+    </div>
+    <div id="playerADragon" class="dragon-container">
+      <div class="dragon-title">Red Dragon</div>
+      <div class="slot" id="A-head" data-slot="head" data-player="A">Head</div>
+      <div class="slot" id="A-body" data-slot="body" data-player="A">Body</div>
+      <div class="slot" id="A-tail" data-slot="tail" data-player="A">Tail</div>
+    </div>
+    <button id="nextToSetupB">Next</button>
+  </div>
+
+  <!-- Setup Phase: Player B -->
+  <div id="setupPageB" class="page">
+    <h2>Player B Setup (Blue Dragon)</h2>
+    <div id="playerBHand" style="margin-bottom: 20px;">
+      <!-- Player B's hand cards will appear here -->
+    </div>
+    <div id="playerBDragon" class="dragon-container">
+      <div class="dragon-title">Blue Dragon</div>
+      <div class="slot" id="B-head" data-slot="head" data-player="B">Head</div>
+      <div class="slot" id="B-body" data-slot="body" data-player="B">Body</div>
+      <div class="slot" id="B-tail" data-slot="tail" data-player="B">Tail</div>
+    </div>
+    <button id="nextToConfirmation">Next</button>
+  </div>
+
+  <!-- Confirmation Page -->
+  <div id="confirmationPage" class="page">
+    <h2>Confirm Dragons</h2>
+    <div id="confirmationDragons">
+      <div class="dragon-container">
+        <div class="dragon-title">Red Dragon (Player A)</div>
+        <div id="confirmA-head" class="slot">Head</div>
+        <div id="confirmA-body" class="slot">Body</div>
+        <div id="confirmA-tail" class="slot">Tail</div>
+      </div>
+      <div class="dragon-container">
+        <div class="dragon-title">Blue Dragon (Player B)</div>
+        <div id="confirmB-head" class="slot">Head</div>
+        <div id="confirmB-body" class="slot">Body</div>
+        <div id="confirmB-tail" class="slot">Tail</div>
+      </div>
+    </div>
+    <button id="startBattle">Start Battle</button>
+  </div>
+
+  <!-- Player A Turn -->
+  <div id="playerARound" class="page">
+    <h2>Player A Turn</h2>
+    <p>Select your defense part by clicking on your dragon and select the attack target by clicking on the opponent's dragon. Remaining Draw Chances: <span id="drawCountA"></span></p>
+    <div id="roundAStatus">
+      <div class="dragon-container">
+        <div class="dragon-title">Your Dragon (Red)</div>
+        <div class="slot" id="roundA-head" data-slot="head" data-player="A">Head</div>
+        <div class="slot" id="roundA-body" data-slot="body" data-player="A">Body</div>
+        <div class="slot" id="roundA-tail" data-slot="tail" data-player="A">Tail</div>
+      </div>
+      <div class="dragon-container">
+        <div class="dragon-title">Opponent's Dragon (Blue)</div>
+        <div class="slot" id="roundB-head" data-slot="head" data-player="B">Head</div>
+        <div class="slot" id="roundB-body" data-slot="body" data-player="B">Body</div>
+        <div class="slot" id="roundB-tail" data-slot="tail" data-player="B">Tail</div>
+      </div>
+    </div>
+    <button id="playerASpecialSkill">Use Special Skill</button>
+    <button id="playerADraw">Draw Card (2)</button>
+    <button id="playerANext">Next</button>
+  </div>
+
+  <!-- Player B Turn -->
+  <div id="playerBRound" class="page">
+    <h2>Player B Turn</h2>
+    <p>Select your defense part by clicking on your dragon and select the attack target by clicking on the opponent's dragon. Remaining Draw Chances: <span id="drawCountB"></span></p>
+    <div id="roundBStatus">
+      <div class="dragon-container">
+        <div class="dragon-title">Your Dragon (Blue)</div>
+        <div class="slot" id="roundB2-head" data-slot="head" data-player="B">Head</div>
+        <div class="slot" id="roundB2-body" data-slot="body" data-player="B">Body</div>
+        <div class="slot" id="roundB2-tail" data-slot="tail" data-player="B">Tail</div>
+      </div>
+      <div class="dragon-container">
+        <div class="dragon-title">Opponent's Dragon (Red)</div>
+        <div class="slot" id="roundA2-head" data-slot="head" data-player="A">Head</div>
+        <div class="slot" id="roundA2-body" data-slot="body" data-player="A">Body</div>
+        <div class="slot" id="roundA2-tail" data-slot="tail" data-player="A">Tail</div>
+      </div>
+    </div>
+    <button id="playerBSpecialSkill">Use Special Skill</button>
+    <button id="playerBDraw">Draw Card (2)</button>
+    <button id="playerBNext">Next</button>
+  </div>
+
+  <!-- Resolution Page -->
+  <div id="resolutionPage" class="page">
+    <h2>Round Resolution</h2>
+    <div id="resolutionDetails">
+      <!-- Battle process and results will be shown here in a structured format -->
+    </div>
+    <button id="nextRound">Next Round</button>
+  </div>
+
+  <!-- Replacement Modal -->
+  <div id="replacementModal">
+    <div class="modal-content">
+      <p>Please select a replacement slot</p>
+      <button class="replacementOption" data-slot="head">Head</button>
+      <button class="replacementOption" data-slot="body">Body</button>
+      <button class="replacementOption" data-slot="tail">Tail</button>
+      <button id="cancelReplacement">Cancel</button>
+    </div>
+  </div>
+
+  <script>
+    /* ===== Game Data and State ===== */
+    const cardsData = [
+      { id: 1, name: "Pure Black Skin of Crow-Faced Black Flash", ability: 7, health: 4, skill: "This turn, your action priority becomes 2." },
+      { id: 2, name: "Translucent Wing Membrane of Night Leader", ability: 8, health: 3, skill: "If your attack causes no damage, perform an extra attack on each of the opponent's other two parts." },
+      { id: 3, name: "Blue-Purple Feather of Rock-Pillar Feathered Dragon", ability: 4, health: 7, skill: "This turn, your head, body and tail all perform a defensive action with defense equal to your Body card's ability minus 2." },
+      { id: 4, name: "Misty Aura of the Secret Realm Butterfly Dream Dragon", ability: 2, health: 9, skill: "Deal 4 damage to your own tail and restore 4 health to your head and body." },
+      { id: 5, name: "Dragon Horn of Fliphorn Dragon", ability: 1, health: 10, skill: "If any of your parts would be destroyed, prevent it and leave that part with 1 health." },
+      { id: 6, name: "Spirit Orb of White Saint Ghost Serpent", ability: 5, health: 6, skill: "Randomly fully restore one of your parts that is not at full health." },
+      { id: 7, name: "Jade Wing of Snow Wing", ability: 6, health: 5, skill: "This turn, your opponent's special skills are invalid and your defense +2." },
+      { id: 8, name: "Spinneret of Iron Sand Dragon Spider", ability: 3, health: 8, skill: "If you successfully defend, attack opponent's head for 6 damage (can be defended)." },
+      { id: 9, name: "Wind Feather of Gariel", ability: 9, health: 2, skill: "For this turn, if your head defends, defense +5; if not, automatically perform a defensive action with head defense value of 5." },
+      { id: 10, name: "Ice-Fire Feather of Dan Frost Lonely Goose", ability: 10, health: 1, skill: "Your attack -2 this turn, and perform an extra attack on a random opponent part." }
+    ];
+
+    let game = {
+      deck: [],
+      discardPile: [],
+      currentRound: 1,
+      // 每个玩家固定拥有2次抽牌机会（不刷新）
+      players: {
+        A: { hand: [], dragon: { head: null, body: null, tail: null }, drawOpportunities: 2, selectedDefense: null, selectedAttack: null, prevDefense: null, prevAttack: null, specialActivated: false, preventDestructionUsed: false },
+        B: { hand: [], dragon: { head: null, body: null, tail: null }, drawOpportunities: 2, selectedDefense: null, selectedAttack: null, prevDefense: null, prevAttack: null, specialActivated: false, preventDestructionUsed: false }
+      }
+    };
+
+    /* ===== Helper: Check if opponent's tail is card7 and activated ===== */
+    function isOpponentSpecialDisabled(player) {
+      let opponent = (player === "A") ? "B" : "A";
+      return (game.players[opponent].dragon.tail && game.players[opponent].dragon.tail.id == 7 && game.players[opponent].specialActivated);
+    }
+
+    /* ===== Utility Functions ===== */
+    function shuffle(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+      return array;
+    }
+
+    // 初始化抽牌堆，并为每张卡牌赋予maxHealth属性
+    function initDeck() {
+      game.deck = cardsData.map(card => ({ ...card, maxHealth: card.health }));
+      shuffle(game.deck);
+    }
+
+    function drawCards(num) {
+      let drawn = [];
+      for (let i = 0; i < num; i++) {
+        if (game.deck.length > 0) {
+          drawn.push(game.deck.shift());
+        }
+      }
+      return drawn;
+    }
+
+    function createCardElement(card) {
+      let div = document.createElement("div");
+      div.className = "card";
+      div.draggable = true;
+      div.dataset.cardId = card.id;
+      div.innerHTML = `<strong>${card.name}</strong><br>
+                       Ability: ${card.ability}<br>
+                       Health: ${card.health}<br>
+                       Skill: ${card.skill}`;
+      div.addEventListener("dragstart", cardDragStart);
+      return div;
+    }
+
+    /* ===== Drag and Drop Functions ===== */
+    function cardDragStart(e) {
+      e.dataTransfer.setData("text/plain", e.target.dataset.cardId);
+    }
+
+    function slotDragOver(e) {
+      e.preventDefault();
+    }
+
+    // 修改：如果卡槽内已有卡，则将其返回至手牌，而不是进入弃牌堆
+    function slotDrop(e) {
+      e.preventDefault();
+      let cardId = e.dataTransfer.getData("text/plain");
+      let card = getCardById(cardId, game.players[currentSetupPlayer].hand);
+      if (card) {
+        let slot = e.currentTarget;
+        let slotType = slot.dataset.slot;
+        let player = slot.dataset.player;
+        // 如果卡槽已有卡，则将原来的卡返回到手牌中
+        if (game.players[player].dragon[slotType]) {
+          let replacedCard = game.players[player].dragon[slotType];
+          game.players[player].hand.push(replacedCard);
+        }
+        game.players[player].dragon[slotType] = card;
+        game.players[player].hand = game.players[player].hand.filter(c => c.id != card.id);
+        updateHandUI(player);
+        updateDragonUI(player);
+      }
+    }
+
+    function getCardById(id, array) {
+      return array.find(c => c.id == id);
+    }
+
+    /* ===== UI Update Functions ===== */
+    function updateHandUI(player) {
+      let handDiv = document.getElementById(player === "A" ? "playerAHand" : "playerBHand");
+      handDiv.innerHTML = "";
+      game.players[player].hand.forEach(card => {
+        handDiv.appendChild(createCardElement(card));
+      });
+    }
+
+    function updateDragonUI(player) {
+      let dragon = game.players[player].dragon;
+      for (let part in dragon) {
+        let slot = document.getElementById(player + "-" + part);
+        if (dragon[part]) {
+          slot.classList.add("filled");
+          slot.innerHTML = `<strong>${dragon[part].name}</strong><br>
+                            Value: ${dragon[part].ability}<br>
+                            Health: ${dragon[part].health}<br>
+                            Skill: ${dragon[part].skill}`;
+        } else {
+          slot.classList.remove("filled");
+          slot.innerHTML = part.charAt(0).toUpperCase() + part.slice(1);
+        }
+      }
+    }
+
+    function updateRoundUI() {
+      // 更新 Player A 回合视图
+      ["head", "body", "tail"].forEach(part => {
+        let slot = document.getElementById("roundA-" + part);
+        let card = game.players.A.dragon[part];
+        slot.innerHTML = card ? `<strong>${card.name}</strong><br>
+                                  Value: ${card.ability}<br>
+                                  Health: ${card.health}<br>
+                                  Skill: ${card.skill}`
+                              : part.charAt(0).toUpperCase() + part.slice(1);
+        // 清除当前选择相关样式
+        slot.classList.remove("defense-selected", "prev-defense");
+        // 为当前回合己方防御选择添加样式
+        if(game.players.A.selectedDefense === part) {
+          slot.classList.add("defense-selected");
+        } else if(game.players.A.prevDefense === part) {
+          slot.classList.add("prev-defense");
+        }
+      });
+      // 更新 Player A 对手（Blue）攻击目标视图
+      ["head", "body", "tail"].forEach(part => {
+        let slot = document.getElementById("roundB-" + part);
+        let card = game.players.B.dragon[part];
+        slot.innerHTML = card ? `<strong>${card.name}</strong><br>
+                                  Value: ${card.ability}<br>
+                                  Health: ${card.health}<br>
+                                  Skill: ${card.skill}`
+                              : part.charAt(0).toUpperCase() + part.slice(1);
+        slot.classList.remove("attack-selected", "prev-attack");
+        if(game.players.A.selectedAttack === part) {
+          slot.classList.add("attack-selected");
+        } else if(game.players.A.prevAttack === part) {
+          slot.classList.add("prev-attack");
+        }
+      });
+      // 更新 Player B 回合视图（己方防御）
+      ["head", "body", "tail"].forEach(part => {
+        let slot = document.getElementById("roundB2-" + part);
+        let card = game.players.B.dragon[part];
+        slot.innerHTML = card ? `<strong>${card.name}</strong><br>
+                                  Value: ${card.ability}<br>
+                                  Health: ${card.health}<br>
+                                  Skill: ${card.skill}`
+                              : part.charAt(0).toUpperCase() + part.slice(1);
+        slot.classList.remove("defense-selected", "prev-defense");
+        if(game.players.B.selectedDefense === part) {
+          slot.classList.add("defense-selected");
+        } else if(game.players.B.prevDefense === part) {
+          slot.classList.add("prev-defense");
+        }
+      });
+      // 更新 Player B 对手（Red）攻击目标视图
+      ["head", "body", "tail"].forEach(part => {
+        let slot = document.getElementById("roundA2-" + part);
+        let card = game.players.A.dragon[part];
+        slot.innerHTML = card ? `<strong>${card.name}</strong><br>
+                                  Value: ${card.ability}<br>
+                                  Health: ${card.health}<br>
+                                  Skill: ${card.skill}`
+                              : part.charAt(0).toUpperCase() + part.slice(1);
+        slot.classList.remove("attack-selected", "prev-attack");
+        if(game.players.B.selectedAttack === part) {
+          slot.classList.add("attack-selected");
+        } else if(game.players.B.prevAttack === part) {
+          slot.classList.add("prev-attack");
+        }
+      });
+      // 更新剩余抽牌次数显示
+      document.getElementById("drawCountA").innerText = game.players.A.drawOpportunities;
+      document.getElementById("drawCountB").innerText = game.players.B.drawOpportunities;
+    }
+
+    // 为每个插槽设置拖拽事件
+    document.querySelectorAll(".slot").forEach(slot => {
+      slot.addEventListener("dragover", slotDragOver);
+      slot.addEventListener("drop", slotDrop);
+    });
+
+    /* ===== Page Navigation ===== */
+    function showPage(pageId) {
+      document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+      document.getElementById(pageId).classList.add("active");
+    }
+
+    let currentSetupPlayer = "A";
+
+    // Player A 设置阶段
+    function startSetupA() {
+      initDeck();
+      game.players.A.hand = drawCards(5);
+      updateHandUI("A");
+      updateDragonUI("A");
+    }
+
+    // Player B 设置阶段
+    function startSetupB() {
+      currentSetupPlayer = "B";
+      game.players.B.hand = drawCards(5);
+      updateHandUI("B");
+      updateDragonUI("B");
+    }
+
+    // 确认页面：显示双方龙的组成
+    function showConfirmation() {
+      ["A", "B"].forEach(player => {
+        for (let part in game.players[player].dragon) {
+          let confirmSlot = document.getElementById("confirm" + player + "-" + part);
+          let card = game.players[player].dragon[part];
+          if (card) {
+            confirmSlot.innerHTML = `<strong>${card.name}</strong><br>
+                                     Value: ${card.ability}<br>
+                                     Health: ${card.health}<br>
+                                     Skill: ${card.skill}`;
+          } else {
+            confirmSlot.innerHTML = part.charAt(0).toUpperCase() + part.slice(1);
+          }
+        }
+      });
+    }
+
+    // 回合开始前重置选定与特殊状态（抽牌机会保持不变），同时将上一回合的选择存入 prev 变量
+    function prepareRound() {
+      // 保存上一回合的选择
+      game.players.A.prevDefense = game.players.A.selectedDefense;
+      game.players.A.prevAttack = game.players.A.selectedAttack;
+      game.players.B.prevDefense = game.players.B.selectedDefense;
+      game.players.B.prevAttack = game.players.B.selectedAttack;
+      // 清空本回合的选择
+      game.players.A.selectedDefense = null;
+      game.players.A.selectedAttack = null;
+      game.players.B.selectedDefense = null;
+      game.players.B.selectedAttack = null;
+      game.players.A.specialActivated = false;
+      game.players.B.specialActivated = false;
+      game.players.A.preventDestructionUsed = false;
+      game.players.B.preventDestructionUsed = false;
+      document.getElementById("playerADraw").innerText = "Draw Card (" + game.players.A.drawOpportunities + ")";
+      document.getElementById("playerBDraw").innerText = "Draw Card (" + game.players.B.drawOpportunities + ")";
+      updateRoundUI();
+    }
+
+    /* ===== Special Skill Buttons ===== */
+    document.getElementById("playerASpecialSkill").addEventListener("click", function() {
+      if (!game.players.A.specialActivated && game.players.A.dragon.tail) {
+        game.players.A.specialActivated = true;
+        this.innerText = "Special Skill Activated";
+        this.classList.add("button-disabled");
+        let tailSlot = document.getElementById("A-tail");
+        tailSlot.style.backgroundColor = "#ddd";
+      } else {
+        game.players.A.specialActivated = false;
+        this.innerText = "Use Special Skill";
+        this.classList.remove("button-disabled");
+        let tailSlot = document.getElementById("A-tail");
+        tailSlot.style.backgroundColor = "";
+      }
+    });
+
+    document.getElementById("playerBSpecialSkill").addEventListener("click", function() {
+      if (!game.players.B.specialActivated && game.players.B.dragon.tail) {
+        game.players.B.specialActivated = true;
+        this.innerText = "Special Skill Activated";
+        this.classList.add("button-disabled");
+        let tailSlot = document.getElementById("B-tail");
+        tailSlot.style.backgroundColor = "#ddd";
+      } else {
+        game.players.B.specialActivated = false;
+        this.innerText = "Use Special Skill";
+        this.classList.remove("button-disabled");
+        let tailSlot = document.getElementById("B-tail");
+        tailSlot.style.backgroundColor = "";
+      }
+    });
+
+    /* ===== Draw Card and Replacement Modal ===== */
+    document.getElementById("playerADraw").addEventListener("click", function() {
+      if (game.players.A.drawOpportunities > 0) {
+        openReplacementModal("A");
+      }
+    });
+    document.getElementById("playerBDraw").addEventListener("click", function() {
+      if (game.players.B.drawOpportunities > 0) {
+        openReplacementModal("B");
+      }
+    });
+
+    function openReplacementModal(player) {
+      let modal = document.getElementById("replacementModal");
+      modal.style.display = "flex";
+      modal.dataset.player = player;
+    }
+
+    document.querySelectorAll(".replacementOption").forEach(btn => {
+      btn.addEventListener("click", function() {
+        let slotType = this.dataset.slot;
+        let player = document.getElementById("replacementModal").dataset.player;
+        let newCard = drawCards(1)[0];
+        if(newCard) {
+          if(game.players[player].dragon[slotType]) {
+            game.discardPile.push(game.players[player].dragon[slotType]);
+          }
+          game.players[player].dragon[slotType] = newCard;
+          updateDragonUI(player);
+          updateRoundUI();
+          // 如果替换的是尾部卡牌，则重置特殊技能按钮
+          if(slotType === "tail") {
+            game.players[player].specialActivated = false;
+            if(player === "A") {
+              let btn = document.getElementById("playerASpecialSkill");
+              btn.innerText = "Use Special Skill";
+              btn.classList.remove("button-disabled");
+              document.getElementById("A-tail").style.backgroundColor = "";
+            } else if(player === "B") {
+              let btn = document.getElementById("playerBSpecialSkill");
+              btn.innerText = "Use Special Skill";
+              btn.classList.remove("button-disabled");
+              document.getElementById("B-tail").style.backgroundColor = "";
+            }
+          }
+          setTimeout(() => {
+            if(game.players[player].dragon[slotType] && game.players[player].dragon[slotType].id === newCard.id) {
+              console.log("Replacement successful: card " + newCard.name + " placed in slot " + slotType + " for player " + player);
+            } else {
+              console.error("Replacement failed for player " + player + " in slot " + slotType);
+              alert("Error: Replacement failed!");
+            }
+          }, 100);
+        }
+        game.players[player].drawOpportunities--;
+        if(player === "A") {
+          document.getElementById("playerADraw").innerText = "Draw Card (" + game.players.A.drawOpportunities + ")";
+          if(game.players.A.drawOpportunities <= 0) {
+            document.getElementById("playerADraw").classList.add("button-disabled");
+          }
+        } else {
+          document.getElementById("playerBDraw").innerText = "Draw Card (" + game.players.B.drawOpportunities + ")";
+          if(game.players.B.drawOpportunities <= 0) {
+            document.getElementById("playerBDraw").classList.add("button-disabled");
+          }
+        }
+        closeReplacementModal();
+      });
+    });
+
+    document.getElementById("cancelReplacement").addEventListener("click", closeReplacementModal);
+    function closeReplacementModal() {
+      document.getElementById("replacementModal").style.display = "none";
+    }
+
+    /* ===== Round Slot Selection ===== */
+    function setupRoundSlotSelection() {
+      // Player A: 自己的龙（防御选择） - 使用蓝色实线；对手龙（攻击选择） - 使用红色实线
+      ["head", "body", "tail"].forEach(part => {
+        document.getElementById("roundA-" + part).addEventListener("click", function() {
+          // 清除己方当前防御选择（仅清除带有 .defense-selected 类）
+          ["head", "body", "tail"].forEach(p => {
+            document.getElementById("roundA-" + p).classList.remove("defense-selected");
+          });
+          this.classList.add("defense-selected");
+          game.players.A.selectedDefense = part;
+        });
+        document.getElementById("roundB-" + part).addEventListener("click", function() {
+          // 清除攻击选择（仅清除带有 .attack-selected 类）
+          ["head", "body", "tail"].forEach(p => {
+            document.getElementById("roundB-" + p).classList.remove("attack-selected");
+          });
+          this.classList.add("attack-selected");
+          game.players.A.selectedAttack = part;
+        });
+      });
+      // Player B: 自己的龙（防御选择） - 使用蓝色实线；对手龙（攻击选择） - 使用红色实线
+      ["head", "body", "tail"].forEach(part => {
+        document.getElementById("roundB2-" + part).addEventListener("click", function() {
+          ["head", "body", "tail"].forEach(p => {
+            document.getElementById("roundB2-" + p).classList.remove("defense-selected");
+          });
+          this.classList.add("defense-selected");
+          game.players.B.selectedDefense = part;
+        });
+        document.getElementById("roundA2-" + part).addEventListener("click", function() {
+          ["head", "body", "tail"].forEach(p => {
+            document.getElementById("roundA2-" + p).classList.remove("attack-selected");
+          });
+          this.classList.add("attack-selected");
+          game.players.B.selectedAttack = part;
+        });
+      });
+    }
+
+    function clearSelection(player, type) {
+      // 本函数不再处理视觉效果，由各自事件处理器控制
+      // 这里只是清空对应变量
+      if(player === "A") {
+        if(type === "defense") {
+          game.players.A.selectedDefense = null;
+        } else {
+          game.players.A.selectedAttack = null;
+        }
+      } else {
+        if(type === "defense") {
+          game.players.B.selectedDefense = null;
+        } else {
+          game.players.B.selectedAttack = null;
+        }
+      }
+    }
+
+    /* ===== Helper: Effective Defense Calculation ===== */
+    function getEffectiveDefense(player, part) {
+      // 卡牌3效果：如果己方尾部为卡牌3且激活，则在技能生效前检测对手尾部是否为卡牌7，若是则取消卡牌3效果
+      if(game.players[player].specialActivated && game.players[player].dragon.tail && game.players[player].dragon.tail.id == 3) {
+         if(isOpponentSpecialDisabled(player)) {
+              return game.players[player].dragon[part] ? game.players[player].dragon[part].ability : 0;
+         } else {
+              let bodyCard = game.players[player].dragon.body;
+              let def = 0;
+              if(bodyCard) { def = bodyCard.ability - 2; }
+              if(def < 0) def = 0;
+              return def;
+         }
+      }
+      let card = game.players[player].dragon[part];
+      if (!card) return 0;
+      // 卡牌9效果：如果部位为head且己方尾部为卡牌9且激活，则检测对手特殊技能
+      if(part === "head" && game.players[player].specialActivated && game.players[player].dragon.tail && game.players[player].dragon.tail.id == 9) {
+         if(isOpponentSpecialDisabled(player)) {
+              if(game.players[player].selectedDefense === "head") {
+                  return card.ability;
+              } else {
+                  return 0;
+              }
+         } else {
+              if(game.players[player].selectedDefense === "head") {
+                  return card.ability + 5;
+              } else {
+                  return 5;
+              }
+         }
+      }
+      let baseDefense = card.ability;
+      // 卡牌7效果：如果己方尾部为卡牌7且激活，且该部位被选为防御，则在原有基础上加2
+      if(game.players[player].selectedDefense === part) {
+          if(game.players[player].specialActivated && game.players[player].dragon.tail && game.players[player].dragon.tail.id == 7) {
+              baseDefense += 2;
+          }
+          return baseDefense;
+      }
+      return 0;
+    }
+
+    /* ===== Attack Phase Function ===== */
+    function attackPhase(attacker, defender) {
+      let events = [];
+      let attackerCard = game.players[attacker].dragon.head;
+      if(!attackerCard) {
+        events.push("Player " + attacker + " has no head card to attack.");
+        return events;
+      }
+      let attackValue = attackerCard.ability;
+      // 卡牌10效果：如果己方尾部为卡牌10且激活，则攻击力-2
+      if(game.players[attacker].specialActivated && game.players[attacker].dragon.tail && game.players[attacker].dragon.tail.id == 10) {
+         attackValue -= 2;
+         events.push("Player " + attacker + "'s attack reduced by 2 due to Card 10 special.");
+      }
+      let targetPart = game.players[attacker].selectedAttack;
+      if(!targetPart) {
+         events.push("Player " + attacker + " did not select an attack target.");
+         return events;
+      }
+      let defenderCard = game.players[defender].dragon[targetPart];
+      if(!defenderCard) {
+         events.push("Player " + defender + "'s " + targetPart + " is already destroyed.");
+         return events;
+      }
+      let defenseValue = getEffectiveDefense(defender, targetPart);
+      let damage = attackValue;
+      if(defenseValue > 0) {
+         damage = attackValue - defenseValue;
+         if(damage < 0) damage = 0;
+         events.push("Defended attack on " + targetPart + ": Damage = " + damage + ".");
+      } else {
+         events.push("Unopposed attack on " + targetPart + ": Damage = " + damage + ".");
+      }
+      defenderCard.health -= damage;
+      events.push("Player " + defender + "'s " + targetPart + " remaining health: " + defenderCard.health + ".");
+      if(defenderCard.health <= 0) {
+         // 卡牌5效果：如果己方尾部为卡牌5且激活且未使用，则检测对手特殊技能
+         if(game.players[defender].specialActivated && game.players[defender].dragon.tail && game.players[defender].dragon.tail.id == 5 && !game.players[defender].preventDestructionUsed) {
+            if(isOpponentSpecialDisabled(defender)) {
+              events.push("Card 5 effect canceled due to opponent's Card 7. " + targetPart + " is destroyed!");
+              game.discardPile.push(defenderCard);
+              game.players[defender].dragon[targetPart] = null;
+              if(game.players[defender].drawOpportunities <= 0) {
+                 events.push("Player " + defender + " has no draw opportunities left. Player " + attacker + " wins the game!");
+                 alert("Player " + attacker + " wins the game!");
+                 location.reload();
+              }
+            } else {
+              defenderCard.health = 1;
+              game.players[defender].preventDestructionUsed = true;
+              events.push("Destruction prevented by Card 5 special on " + targetPart + ".");
+            }
+         } else {
+            events.push("Player " + defender + "'s " + targetPart + " is destroyed!");
+            game.discardPile.push(defenderCard);
+            game.players[defender].dragon[targetPart] = null;
+            if(game.players[defender].drawOpportunities <= 0) {
+               events.push("Player " + defender + " has no draw opportunities left. Player " + attacker + " wins the game!");
+               alert("Player " + attacker + " wins the game!");
+               location.reload();
+            }
+         }
+      }
+      // 卡牌2效果：若攻击未造成伤害，则对对手除选择目标外的其他两个部位额外攻击（检测对手特殊技能）
+      if(game.players[attacker].specialActivated && game.players[attacker].dragon.tail && game.players[attacker].dragon.tail.id == 2 && damage === 0) {
+           if(isOpponentSpecialDisabled(attacker)) {
+             events.push("Card 2 extra attack canceled due to opponent's Card 7.");
+           } else {
+             events.push("Card 2 special triggers extra attacks on other parts.");
+             ["head", "body", "tail"].forEach(part => {
+                if(part !== targetPart && game.players[defender].dragon[part]) {
+                   let extraDefense = getEffectiveDefense(defender, part);
+                   let extraDamage = attackerCard.ability;
+                   if(extraDefense > 0) {
+                      extraDamage = attackerCard.ability - extraDefense;
+                      if(extraDamage < 0) extraDamage = 0;
+                   }
+                   game.players[defender].dragon[part].health -= extraDamage;
+                   events.push("Extra attack on " + part + ": Damage = " + extraDamage + ", remaining health: " + game.players[defender].dragon[part].health + ".");
+                   if(game.players[defender].dragon[part].health <= 0) {
+                      if(game.players[defender].specialActivated && game.players[defender].dragon.tail && game.players[defender].dragon.tail.id == 5 && !game.players[defender].preventDestructionUsed) {
+                         game.players[defender].dragon[part].health = 1;
+                         game.players[defender].preventDestructionUsed = true;
+                         events.push("Destruction prevented by Card 5 special on " + part + ".");
+                      } else {
+                         events.push("Player " + defender + "'s " + part + " is destroyed!");
+                         game.discardPile.push(game.players[defender].dragon[part]);
+                         game.players[defender].dragon[part] = null;
+                         if(game.players[defender].drawOpportunities <= 0) {
+                            events.push("Player " + defender + " has no draw opportunities left. Player " + attacker + " wins the game!");
+                            alert("Player " + attacker + " wins the game!");
+                            location.reload();
+                         }
+                      }
+                   }
+                }
+             });
+           }
+      }
+      // 卡牌10效果：对对手随机一部位额外进行一次攻击（检测对手特殊技能）
+      if(game.players[attacker].specialActivated && game.players[attacker].dragon.tail && game.players[attacker].dragon.tail.id == 10) {
+           if(isOpponentSpecialDisabled(attacker)) {
+             events.push("Card 10 extra attack canceled due to opponent's Card 7.");
+           } else {
+             let availableParts = ["head", "body", "tail"].filter(part => game.players[defender].dragon[part]);
+             if(availableParts.length > 0) {
+                let randomPart = availableParts[Math.floor(Math.random() * availableParts.length)];
+                let extraDefense = getEffectiveDefense(defender, randomPart);
+                let extraDamage = attackerCard.ability;
+                if(extraDefense > 0) {
+                   extraDamage = attackerCard.ability - extraDefense;
+                   if(extraDamage < 0) extraDamage = 0;
+                }
+                game.players[defender].dragon[randomPart].health -= extraDamage;
+                events.push("Card 10 extra attack on random " + randomPart + ": Damage = " + extraDamage + ", remaining health: " + game.players[defender].dragon[randomPart].health + ".");
+                if(game.players[defender].dragon[randomPart].health <= 0) {
+                   if(game.players[defender].specialActivated && game.players[defender].dragon.tail && game.players[defender].dragon.tail.id == 5 && !game.players[defender].preventDestructionUsed) {
+                      game.players[defender].dragon[randomPart].health = 1;
+                      game.players[defender].preventDestructionUsed = true;
+                      events.push("Destruction prevented by Card 5 special on " + randomPart + ".");
+                   } else {
+                      events.push("Player " + defender + "'s " + randomPart + " is destroyed!");
+                      game.discardPile.push(game.players[defender].dragon[randomPart]);
+                      game.players[defender].dragon[randomPart] = null;
+                      if(game.players[defender].drawOpportunities <= 0) {
+                         events.push("Player " + defender + " has no draw opportunities left. Player " + attacker + " wins the game!");
+                         alert("Player " + attacker + " wins the game!");
+                         location.reload();
+                      }
+                   }
+                }
+             }
+           }
+      }
+      // 卡牌8效果：若防御成功，则对对手头部进行6点反击（检测对手特殊技能）
+      let defenderTail = game.players[defender].dragon.tail;
+      if(game.players[defender].specialActivated && defenderTail && defenderTail.id == 8 && defenseValue > 0) {
+         if(isOpponentSpecialDisabled(defender)) {
+           events.push("Card 8 counterattack canceled due to opponent's Card 7.");
+         } else {
+           events.push("Card 8 counterattack triggers from defender.");
+           let counterDamage = 6;
+           let attackerHeadDefense = getEffectiveDefense(attacker, "head");
+           if(attackerHeadDefense > 0) {
+              counterDamage = 6 - attackerHeadDefense;
+              if(counterDamage < 0) counterDamage = 0;
+           }
+           if(game.players[attacker].dragon.head) {
+              game.players[attacker].dragon.head.health -= counterDamage;
+              events.push("Counterattack on attacker's head: Damage = " + counterDamage + ", remaining health: " + game.players[attacker].dragon.head.health + ".");
+              if(game.players[attacker].dragon.head.health <= 0) {
+                 if(game.players[attacker].specialActivated && game.players[attacker].dragon.tail && game.players[attacker].dragon.tail.id == 5 && !game.players[attacker].preventDestructionUsed) {
+                    game.players[attacker].dragon.head.health = 1;
+                    game.players[attacker].preventDestructionUsed = true;
+                    events.push("Destruction prevented by Card 5 special on attacker's head.");
+                 } else {
+                    events.push("Attacker's head is destroyed by counterattack!");
+                    game.discardPile.push(game.players[attacker].dragon.head);
+                    game.players[attacker].dragon.head = null;
+                    if(game.players[attacker].drawOpportunities <= 0) {
+                       events.push("Player " + attacker + " has no draw opportunities left. Player " + defender + " wins the game!");
+                       alert("Player " + defender + " wins the game!");
+                       location.reload();
+                    }
+                 }
+              }
+           }
+         }
+      }
+      return events;
+    }
+
+    /* ===== Display Resolution ===== */
+    function displayResolution(preAttack, order, firstAttack, secondAttack) {
+      let html = "";
+      html += "<h3>Pre-Attack Effects</h3>";
+      if(preAttack.length > 0) {
+        html += "<ul>" + preAttack.map(e => "<li>" + e + "</li>").join("") + "</ul>";
+      } else {
+        html += "<p>No pre-attack effects.</p>";
+      }
+      html += "<h3>Action Order</h3>";
+      if(order.length > 0) {
+        html += "<ul>" + order.map(e => "<li>" + e + "</li>").join("") + "</ul>";
+      } else {
+        html += "<p>No action order determined.</p>";
+      }
+      html += "<h3>First Attack Phase</h3>";
+      if(firstAttack.length > 0) {
+        html += "<ul>" + firstAttack.map(e => "<li>" + e + "</li>").join("") + "</ul>";
+      } else {
+        html += "<p>No attack occurred in the first phase.</p>";
+      }
+      html += "<h3>Second Attack Phase</h3>";
+      if(secondAttack.length > 0) {
+        html += "<ul>" + secondAttack.map(e => "<li>" + e + "</li>").join("") + "</ul>";
+      } else {
+        html += "<p>No attack occurred in the second phase.</p>";
+      }
+      html += "<p>Round " + game.currentRound + " complete.</p>";
+      document.getElementById("resolutionDetails").innerHTML = html;
+    }
+
+    /* ===== Round Resolution ===== */
+    function resolveRound() {
+      let preAttackEvents = [];
+      let actionOrderEvents = [];
+      let firstAttackEvents = [];
+      let secondAttackEvents = [];
+
+      // 预攻效果：卡牌4与卡牌6，在生效前检测对手尾部是否为卡牌7
+      ["A", "B"].forEach(player => {
+         let tail = game.players[player].dragon.tail;
+         if(game.players[player].specialActivated && tail) {
+            if(tail.id == 4) {
+               if(isOpponentSpecialDisabled(player)) {
+                 preAttackEvents.push("Player " + player + "'s Card 4 effect canceled due to opponent's Card 7.");
+               } else {
+                 preAttackEvents.push("Player " + player + " activates Card 4: Tail takes 4 damage; Head and Body gain 4 health.");
+                 tail.health -= 4;
+                 if(game.players[player].dragon.head) {
+                    let head = game.players[player].dragon.head;
+                    head.health = Math.min(head.health + 4, head.maxHealth);
+                 }
+                 if(game.players[player].dragon.body) {
+                    let body = game.players[player].dragon.body;
+                    body.health = Math.min(body.health + 4, body.maxHealth);
+                 }
+                 if(tail.health <= 0) {
+                    preAttackEvents.push("Player " + player + "'s Tail is destroyed due to Card 4 damage.");
+                    game.discardPile.push(tail);
+                    game.players[player].dragon.tail = null;
+                 }
+               }
+            }
+            if(tail.id == 6) {
+               if(isOpponentSpecialDisabled(player)) {
+                 preAttackEvents.push("Player " + player + "'s Card 6 effect canceled due to opponent's Card 7.");
+               } else {
+                 let parts = [];
+                 ["head", "body", "tail"].forEach(part => {
+                    let c = game.players[player].dragon[part];
+                    if(c && c.health < c.maxHealth) parts.push({part: part, card: c});
+                 });
+                 if(parts.length > 0) {
+                    let chosen = parts[Math.floor(Math.random() * parts.length)];
+                    preAttackEvents.push("Player " + player + " activates Card 6: " + chosen.part + " is fully restored.");
+                    chosen.card.health = chosen.card.maxHealth;
+                 }
+               }
+            }
+         }
+      });
+
+      // 确定行动顺序（卡牌1效果）
+      let A_priority = 0, B_priority = 0;
+      if(game.players.A.specialActivated && game.players.A.dragon.tail && game.players.A.dragon.tail.id == 1) {
+         if(isOpponentSpecialDisabled("A")) {
+           actionOrderEvents.push("Player A's Card 1 effect canceled due to opponent's Card 7.");
+         } else {
+           A_priority = 2;
+           actionOrderEvents.push("Player A's Card 1 special sets priority to 2.");
+         }
+      }
+      if(game.players.B.specialActivated && game.players.B.dragon.tail && game.players.B.dragon.tail.id == 1) {
+         if(isOpponentSpecialDisabled("B")) {
+           actionOrderEvents.push("Player B's Card 1 effect canceled due to opponent's Card 7.");
+         } else {
+           B_priority = 2;
+           actionOrderEvents.push("Player B's Card 1 special sets priority to 2.");
+         }
+      }
+      if(A_priority === 0 && B_priority === 0) {
+         let A_val = game.players.A.dragon.tail ? game.players.A.dragon.tail.ability : 0;
+         let B_val = game.players.B.dragon.tail ? game.players.B.dragon.tail.ability : 0;
+         if(A_val > B_val) { A_priority = 1; actionOrderEvents.push("Player A's tail ability (" + A_val + ") > Player B's (" + B_val + "), so priority 1."); }
+         else if(B_val > A_val) { B_priority = 1; actionOrderEvents.push("Player B's tail ability (" + B_val + ") > Player A's (" + A_val + "), so priority 1."); }
+         else { actionOrderEvents.push("Both players have equal tail ability."); }
+      }
+
+      let first, second;
+      if(A_priority > B_priority) { first = "A"; second = "B"; }
+      else if(B_priority > A_priority) { first = "B"; second = "A"; }
+      else { first = "A"; second = "B"; }
+      actionOrderEvents.push("Player " + first + " acts first.");
+
+      // 第一攻击阶段
+      firstAttackEvents = attackPhase(first, second);
+      if(checkGameOver()) { displayResolution(preAttackEvents, actionOrderEvents, firstAttackEvents, []); return; }
+
+      // 第二攻击阶段
+      secondAttackEvents = attackPhase(second, first);
+      if(checkGameOver()) { displayResolution(preAttackEvents, actionOrderEvents, firstAttackEvents, secondAttackEvents); return; }
+
+      displayResolution(preAttackEvents, actionOrderEvents, firstAttackEvents, secondAttackEvents);
+    }
+
+    function checkGameOver() {
+      for(let player of ["A", "B"]) {
+        for(let part in game.players[player].dragon) {
+          if(!game.players[player].dragon[part] && game.players[player].drawOpportunities <= 0) {
+            alert("Player " + (player === "A" ? "B" : "A") + " wins the game!");
+            location.reload();
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    /* ===== Button Navigation Events ===== */
+    document.getElementById("nextToSetupB").addEventListener("click", function() {
+      if(game.players.A.dragon.head && game.players.A.dragon.body && game.players.A.dragon.tail) {
+        showPage("setupPageB");
+        startSetupB();
+      } else {
+        alert("Please drag 3 cards to fill Head, Body, and Tail for Player A.");
+      }
+    });
+
+    document.getElementById("nextToConfirmation").addEventListener("click", function() {
+      if(game.players.B.dragon.head && game.players.B.dragon.body && game.players.B.dragon.tail) {
+        showConfirmation();
+        showPage("confirmationPage");
+      } else {
+        alert("Please drag 3 cards to fill Head, Body, and Tail for Player B.");
+      }
+    });
+
+    // 开始对战前，将双方手中剩余的卡牌（共4张）加入抽牌堆并洗牌
+    document.getElementById("startBattle").addEventListener("click", function() {
+      let remainingCards = [...game.players.A.hand, ...game.players.B.hand];
+      game.deck = remainingCards.concat(game.deck);
+      shuffle(game.deck);
+      game.players.A.hand = [];
+      game.players.B.hand = [];
+      prepareRound();
+      setupRoundSlotSelection();
+      showPage("playerARound");
+    });
+
+    document.getElementById("playerANext").addEventListener("click", function() {
+      if(!game.players.A.selectedAttack || !game.players.A.selectedDefense) {
+        alert("Please select both an attack target and a defense part.");
+        return;
+      }
+      // 将本回合选择存为上回合选择
+      game.players.A.prevDefense = game.players.A.selectedDefense;
+      game.players.A.prevAttack = game.players.A.selectedAttack;
+      showPage("playerBRound");
+    });
+
+    document.getElementById("playerBNext").addEventListener("click", function() {
+      if(!game.players.B.selectedAttack || !game.players.B.selectedDefense) {
+        alert("Please select both an attack target and a defense part.");
+        return;
+      }
+      game.players.B.prevDefense = game.players.B.selectedDefense;
+      game.players.B.prevAttack = game.players.B.selectedAttack;
+      showPage("resolutionPage");
+      resolveRound();
+    });
+
+    document.getElementById("nextRound").addEventListener("click", function() {
+      game.currentRound++;
+      prepareRound();
+      showPage("playerARound");
+    });
+
+    /* ===== Initialize the Game ===== */
+    window.addEventListener("DOMContentLoaded", function(){
+      startSetupA();
+    });
+  </script>
+</body>
+</html>
