@@ -99,6 +99,7 @@
     <h3>3. Win Condition:</h3>
     <ul>
       <li>If a part is destroyed and its owner has exhausted their 2 draw chances, that player loses the game.</li>
+      <li>If at the settlement phase, all parts are destroyed (i.e. all slots are empty), then that player loses the game.</li>
     </ul>
     <h2>Rounds:</h2>
     <p>The game continues with subsequent rounds following the same structure until one player wins the game.</p>
@@ -261,7 +262,7 @@
     /* ===== Helper: Check if opponent's tail is card7 and activated ===== */
     function isOpponentSpecialDisabled(player) {
       let opponent = (player === "A") ? "B" : "A";
-      return (game.players[opponent].dragon.tail && game.players[opponent].dragon.tail.id == 7 && game.players[opponent].specialActivated);
+      return (game.players[opponent].dragon.tail && game.players[opponent].specialActivated);
     }
 
     /* ===== Utility Functions ===== */
@@ -786,9 +787,6 @@
               game.players[defender].dragon[targetPart] = null;
               if(game.players[defender].drawOpportunities <= 0) {
                  events.push("Player " + defender + " has no draw opportunities left. Player " + attacker + " wins the game!");
-                 showPage("resolutionPage");
-                 document.getElementById("winnerText").innerText = "Player " + attacker + " wins the game!";
-                 document.getElementById("winnerModal").style.display = "flex";
                  return events;
               }
             } else {
@@ -802,9 +800,6 @@
             game.players[defender].dragon[targetPart] = null;
             if(game.players[defender].drawOpportunities <= 0) {
                events.push("Player " + defender + " has no draw opportunities left. Player " + attacker + " wins the game!");
-               showPage("resolutionPage");
-               document.getElementById("winnerText").innerText = "Player " + attacker + " wins the game!";
-               document.getElementById("winnerModal").style.display = "flex";
                return events;
             }
          }
@@ -835,9 +830,6 @@
                          game.players[defender].dragon[part] = null;
                          if(game.players[defender].drawOpportunities <= 0) {
                             events.push("Player " + defender + " has no draw opportunities left. Player " + attacker + " wins the game!");
-                            showPage("resolutionPage");
-                            document.getElementById("winnerText").innerText = "Player " + attacker + " wins the game!";
-                            document.getElementById("winnerModal").style.display = "flex";
                             return events;
                          }
                       }
@@ -875,9 +867,6 @@
                       game.players[defender].dragon[randomPart] = null;
                       if(game.players[defender].drawOpportunities <= 0) {
                          events.push("Player " + defender + " has no draw opportunities left. Player " + attacker + " wins the game!");
-                         showPage("resolutionPage");
-                         document.getElementById("winnerText").innerText = "Player " + attacker + " wins the game!";
-                         document.getElementById("winnerModal").style.display = "flex";
                          return events;
                       }
                    }
@@ -911,9 +900,6 @@
                     game.players[attacker].dragon.head = null;
                     if(game.players[attacker].drawOpportunities <= 0) {
                        events.push("Player " + attacker + " has no draw opportunities left. Player " + defender + " wins the game!");
-                       showPage("resolutionPage");
-                       document.getElementById("winnerText").innerText = "Player " + defender + " wins the game!";
-                       document.getElementById("winnerModal").style.display = "flex";
                        return events;
                     }
                  }
@@ -954,12 +940,96 @@
       document.getElementById("resolutionDetails").innerHTML = html;
     }
 
+    // 修改：新增规则检测——如果在结算阶段一名玩家所有部位均被破坏（卡槽全空），则该玩家输掉比赛
+    function checkGameOver() {
+      // 检查是否所有部位都被破坏
+      for(let player of ["A", "B"]) {
+        if(!game.players[player].dragon.head && !game.players[player].dragon.body && !game.players[player].dragon.tail) {
+          let winner = (player === "A" ? "B" : "A");
+          showPage("resolutionPage");
+          document.getElementById("winnerText").innerText = "Player " + winner + " wins the game!";
+          document.getElementById("winnerModal").style.display = "flex";
+          return true;
+        }
+      }
+      // 保留原有规则：某部位破坏且抽牌机会耗尽
+      for(let player of ["A", "B"]) {
+          for(let part in game.players[player].dragon) {
+              if(!game.players[player].dragon[part] && game.players[player].drawOpportunities <= 0) {
+                let winner = (player === "A" ? "B" : "A");
+                showPage("resolutionPage");
+                document.getElementById("winnerText").innerText = "Player " + winner + " wins the game!";
+                document.getElementById("winnerModal").style.display = "flex";
+                return true;
+              }
+          }
+      }
+      return false;
+    }
+
+    document.getElementById("nextToSetupB").addEventListener("click", function() {
+      if(game.players.A.dragon.head && game.players.A.dragon.body && game.players.A.dragon.tail) {
+        showPage("setupPageB");
+        startSetupB();
+      } else {
+        alert("Please drag 3 cards to fill Head, Body, and Tail for Player A.");
+      }
+    });
+
+    document.getElementById("nextToConfirmation").addEventListener("click", function() {
+      if(game.players.B.dragon.head && game.players.B.dragon.body && game.players.B.dragon.tail) {
+        showConfirmation();
+        showPage("confirmationPage");
+      } else {
+        alert("Please drag 3 cards to fill Head, Body, and Tail for Player B.");
+      }
+    });
+
+    document.getElementById("startBattle").addEventListener("click", function() {
+      let remainingCards = [...game.players.A.hand, ...game.players.B.hand];
+      game.deck = remainingCards.concat(game.deck);
+      shuffle(game.deck);
+      game.players.A.hand = [];
+      game.players.B.hand = [];
+      prepareRound();
+      setupRoundSlotSelection();
+      showPage("playerARound");
+    });
+
+    document.getElementById("playerANext").addEventListener("click", function() {
+      if(!game.players.A.selectedAttack || !game.players.A.selectedDefense) {
+        alert("Please select both an attack target and a defense part.");
+        return;
+      }
+      game.players.A.prevDefense = game.players.A.selectedDefense;
+      game.players.A.prevAttack = game.players.A.selectedAttack;
+      showPage("playerBRound");
+    });
+
+    document.getElementById("playerBNext").addEventListener("click", function() {
+      if(!game.players.B.selectedAttack || !game.players.B.selectedDefense) {
+        alert("Please select both an attack target and a defense part.");
+        return;
+      }
+      game.players.B.prevDefense = game.players.B.selectedDefense;
+      game.players.B.prevAttack = game.players.B.selectedAttack;
+      showPage("resolutionPage");
+      resolveRound();
+    });
+
+    document.getElementById("nextRound").addEventListener("click", function() {
+      game.currentRound++;
+      prepareRound();
+      showPage("playerARound");
+    });
+
     function resolveRound() {
       let preAttackEvents = [];
       let actionOrderEvents = [];
       let firstAttackEvents = [];
       let secondAttackEvents = [];
 
+      // Pre-Attack Effects
       ["A", "B"].forEach(player => {
          let tail = game.players[player].dragon.tail;
          if(game.players[player].specialActivated && tail) {
@@ -1042,77 +1112,6 @@
 
       displayResolution(preAttackEvents, actionOrderEvents, firstAttackEvents, secondAttackEvents);
     }
-
-    function checkGameOver() {
-      for(let player of ["A", "B"]) {
-        for(let part in game.players[player].dragon) {
-          if(!game.players[player].dragon[part] && game.players[player].drawOpportunities <= 0) {
-            let winner = (player === "A" ? "B" : "A");
-            showPage("resolutionPage");
-            document.getElementById("winnerText").innerText = "Player " + winner + " wins the game!";
-            document.getElementById("winnerModal").style.display = "flex";
-            return true;
-          }
-        }
-      }
-      return false;
-    }
-
-    document.getElementById("nextToSetupB").addEventListener("click", function() {
-      if(game.players.A.dragon.head && game.players.A.dragon.body && game.players.A.dragon.tail) {
-        showPage("setupPageB");
-        startSetupB();
-      } else {
-        alert("Please drag 3 cards to fill Head, Body, and Tail for Player A.");
-      }
-    });
-
-    document.getElementById("nextToConfirmation").addEventListener("click", function() {
-      if(game.players.B.dragon.head && game.players.B.dragon.body && game.players.B.dragon.tail) {
-        showConfirmation();
-        showPage("confirmationPage");
-      } else {
-        alert("Please drag 3 cards to fill Head, Body, and Tail for Player B.");
-      }
-    });
-
-    document.getElementById("startBattle").addEventListener("click", function() {
-      let remainingCards = [...game.players.A.hand, ...game.players.B.hand];
-      game.deck = remainingCards.concat(game.deck);
-      shuffle(game.deck);
-      game.players.A.hand = [];
-      game.players.B.hand = [];
-      prepareRound();
-      setupRoundSlotSelection();
-      showPage("playerARound");
-    });
-
-    document.getElementById("playerANext").addEventListener("click", function() {
-      if(!game.players.A.selectedAttack || !game.players.A.selectedDefense) {
-        alert("Please select both an attack target and a defense part.");
-        return;
-      }
-      game.players.A.prevDefense = game.players.A.selectedDefense;
-      game.players.A.prevAttack = game.players.A.selectedAttack;
-      showPage("playerBRound");
-    });
-
-    document.getElementById("playerBNext").addEventListener("click", function() {
-      if(!game.players.B.selectedAttack || !game.players.B.selectedDefense) {
-        alert("Please select both an attack target and a defense part.");
-        return;
-      }
-      game.players.B.prevDefense = game.players.B.selectedDefense;
-      game.players.B.prevAttack = game.players.B.selectedAttack;
-      showPage("resolutionPage");
-      resolveRound();
-    });
-
-    document.getElementById("nextRound").addEventListener("click", function() {
-      game.currentRound++;
-      prepareRound();
-      showPage("playerARound");
-    });
 
     window.addEventListener("DOMContentLoaded", function(){
       startSetupA();
